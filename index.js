@@ -1,59 +1,39 @@
-const Discord = require('discord.js');
-const client = new Discord.Client({ intents: ["GUILDS", "GUILD_MESSAGES"] })
-const dotenv = require('dotenv'); 
-dotenv.config();
+const { Client, Collection, Intents } = require("discord.js");
+const { token } = require("./config.json");
+const fs = require("fs");
 
-const sleep = (ms) => {
-    return new Promise((r) => setTimeout(r, ms));
+const client = new Client({ intents: [Intents.FLAGS.GUILDS] });
+
+client.commands = new Collection();
+const commandFiles = fs
+  .readdirSync("./commands")
+  .filter((file) => file.endsWith(".js"));
+
+for (const file of commandFiles) {
+  const command = require(`./commands/${file}`);
+  client.commands.set(command.data.name, command);
 }
 
-if (process.env.TOKEN == null) {
-    console.log("An discord token is empty.");
-    sleep(60000).then(() => console.log("Service is getting stopped automatically"));
-    return 0;
-}
-
-const discordLogin = async() => {
-    try {
-        await client.login(process.env.TOKEN);  
-    } catch (TOKEN_INVALID) {
-        console.log("An invalid token was provided");
-        sleep(60000).then(() => console.log("Service is getting stopped automatically"));
-    }
-}
-
-
-discordLogin();
-
-
-client.on('ready', () => {
-    console.log(`Logged in as ${client.user.tag}.`);
+client.once("ready", () => {
+  console.log("서버 준비 완료!");
 });
 
-  
-client.on('messageCreate', msg => {
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isCommand()) return;
 
-    try { 
-        if (msg.content === process.env.PREFIX + 'call') msg.channel.send(`!callback`);
+  const command = client.commands.get(interaction.commandName);
 
-        if (msg.content === process.env.PREFIX + 'avatar') msg.channel.send(msg.author.displayAvatarURL());
-        
-        if(msg.content === process.env.PREFIX + 'help') {
-            const embed = new Discord.MessageEmbed()
-            .setTitle("도움말")
-            .setColor('000') 
-            .setDescription('디스코드봇 테스트입니다.');
+  if (!command) return;
 
-            msg.reply({ embeds: [embed] })
-        }
-
-        if(msg.content === process.env.PREFIX + 'server') {
-            msg.channel.send(`현재 서버의 이름은 ${msg.guild.name} 입니다.\n총 멤버 수는 ${msg.guild.memberCount} 명 입니다.`)
-          }
-
-        console.log(msg.content)
-    } catch (e) {
-        console.log(e);
-    }
-    
+  try {
+    await command.execute(interaction);
+  } catch (error) {
+    console.error(error);
+    await interaction.reply({
+      content: "There was an error while executing this command!",
+      ephemeral: true,
+    });
+  }
 });
+
+client.login(token);
